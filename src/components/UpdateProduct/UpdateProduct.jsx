@@ -23,84 +23,100 @@ function UpdateProduct() {
   const [images, setImages] = useState([])
 
 
+  const [uploading, setUploading] = useState(false);
+
+
+  // const handleImageChange = (e) => {
+  //   const fileList = e.target.files;
+  //   const imagesArray = [];
+
+  //   for (let i = 0; i < 4; i++) {
+  //     const reader = new FileReader();
+  //     reader.onload = (event) => {
+  //       imagesArray.push(event.target.result);
+  //       if (imagesArray.length === fileList.length) {
+  //         setImages(imagesArray);
+  //       }
+  //     };
+  //     reader.readAsDataURL(fileList[i]);
+  //   }
+  // };
 
   const handleImageChange = (e) => {
-    const fileList = e.target.files;
-    const imagesArray = [];
-
-    for (let i = 0; i < 4; i++) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        imagesArray.push(event.target.result);
-        if (imagesArray.length === fileList.length) {
-          setImages(imagesArray);
-        }
-      };
-      reader.readAsDataURL(fileList[i]);
-    }
+    const selectedImages = Array.from(e.target.files);
+    setImages(selectedImages);
   };
 
 
-  function handleSubmit(e) {
-    e.preventDefault()
-    console.log('form submitted')
-
+  async function handleSubmit(e) {
+    e.preventDefault();
+    console.log('form submitted');
+  
     const metadata = {
-      contentType: 'image/jpeg'
+      contentType: 'image/jpg'
     };
-
-    // images.forEach((image, index) => {
-      const imgRef = ref(storage, `images/${v4()}`);
-      const uploadTask = uploadBytesResumable(imgRef, images[0], metadata);
-
-      uploadTask.on('state_changed',
-        (snapshot) => {
-          // Get task progress, including the number of bytes uploaded and the total number of bytes to be uploaded
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          console.log('Upload is ' + progress + '% done');
-          switch (snapshot.state) {
-            case 'paused':
-              console.log('Upload is paused');
-              break;
-            case 'running':
-              console.log('Upload is running');
-              break;
-          }
-        },
-        (error) => {
-          // Error handling
-          console.error('Upload error:', error);
-        },
-        () => {
-          // Upload completed successfully, now we can get the download URL
-          getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
-            console.log('File available at', downloadURL);
-            setImageUrl((prevArray) => [...prevArray, downloadURL]);
-          });
-        }
-      );
-
-    // })
-
-    // const storageRef = storage().ref();
-    // images.forEach((image, index) => {
-    //   const uploadTask = storageRef.child(`images/${index}`).putString(image, 'data_url');
-
-    // });
-
-
-    const data = {
-      product,
-      manufacturer,
-      quantity,
-      price,
-      description,
-      imageUrl
+  
+    try {
+      const uploadPromises = images.map((image) => {
+        return new Promise((resolve, reject) => {
+          const imgRef = ref(storage, `images/${v4()}`);
+          console.log(images[0]);
+          const uploadTask = uploadBytesResumable(imgRef, image, metadata);
+  
+          uploadTask.on(
+            'state_changed',
+            (snapshot) => {
+              // Get task progress, including the number of bytes uploaded and the total number of bytes to be uploaded
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              console.log('Upload is ' + progress + '% done');
+              switch (snapshot.state) {
+                case 'paused':
+                  console.log('Upload is paused');
+                  break;
+                case 'running':
+                  console.log('Upload is running');
+                  break;
+              }
+            },
+            (error) => {
+              // Error handling
+              console.error('Upload error:', error);
+              reject(error);
+            },
+            async () => {
+              // Upload completed successfully, now we can get the download URL
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              console.log('File available at', downloadURL);
+              setImageUrl((prevArray) => [...prevArray, downloadURL]);
+              resolve(downloadURL);
+            }
+          );
+        });
+      });
+  
+      const uploadedUrls = await Promise.all(uploadPromises);
+  
+      const data = {
+        product,
+        manufacturer,
+        quantity,
+        price,
+        description,
+        imageUrl: uploadedUrls // Use the array of uploaded URLs
+      };
+  
+      console.log("Submitted Images:", images);
+      console.log(data);
+    } catch (error) {
+      // Handle any errors during the upload process
+      console.error('Error uploading images:', error);
+    } finally {
+      setUploading(false);
     }
-
-    console.log("Submitted Images:", images);
-    console.log(data)
   }
+  
+  
+  
 
   return (
     <div className="isolate bg-white px-6 py-24 sm:py-32 lg:px-8">
@@ -119,6 +135,8 @@ function UpdateProduct() {
       <div className="mx-auto max-w-2xl text-center">
         <h2 className="text-3xl font-bold tracking-tight text-orange-700 sm:text-4xl">Update Product Details</h2>
       </div>
+
+      {uploading ? <h1>Uploadoinf</h1> : <></>}
 
       <form onSubmit={(e) => handleSubmit(e)} className="mx-auto mt-16 max-w-xl sm:mt-20">
         <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2">
