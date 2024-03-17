@@ -1,15 +1,17 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from "react-router-dom"
 import { ChevronDownIcon } from '@heroicons/react/20/solid'
 
 import { storage } from '../../firebase/firebase'
 import { v4 } from 'uuid'
 
+import axios from 'axios'
 
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 
-function UpdateProduct() {
+function UpdateProduct(props) {
 
   let { id } = useParams()
   console.log(id)
@@ -22,47 +24,60 @@ function UpdateProduct() {
   const [imageUrl, setImageUrl] = useState([])
   const [images, setImages] = useState([])
 
+  //for viewing images
+  const [viewImages, setViewImages] = useState([])
 
+  //uploading status
   const [uploading, setUploading] = useState(false);
 
 
-  // const handleImageChange = (e) => {
-  //   const fileList = e.target.files;
-  //   const imagesArray = [];
 
-  //   for (let i = 0; i < 4; i++) {
-  //     const reader = new FileReader();
-  //     reader.onload = (event) => {
-  //       imagesArray.push(event.target.result);
-  //       if (imagesArray.length === fileList.length) {
-  //         setImages(imagesArray);
-  //       }
-  //     };
-  //     reader.readAsDataURL(fileList[i]);
-  //   }
-  // };
 
+  //for viewing images
   const handleImageChange = (e) => {
+    const fileList = e.target.files;
+    const imagesArray = [];
+
+    for (let i = 0; i < 4; i++) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        imagesArray.push(event.target.result);
+        if (imagesArray.length === fileList.length) {
+          setViewImages(imagesArray);
+        }
+      };
+      reader.readAsDataURL(fileList[i]);
+    }
+  };
+
+  //for uploading images
+  const uploadImageChange = (e) => {
     const selectedImages = Array.from(e.target.files);
     setImages(selectedImages);
   };
 
 
+  // Handle form submission
   async function handleSubmit(e) {
     e.preventDefault();
     console.log('form submitted');
-  
+
     const metadata = {
       contentType: 'image/jpg'
     };
-  
+
     try {
+
+
+      setUploading(true);
+
+
       const uploadPromises = images.map((image) => {
         return new Promise((resolve, reject) => {
           const imgRef = ref(storage, `images/${v4()}`);
-          console.log(images[0]);
+          
           const uploadTask = uploadBytesResumable(imgRef, image, metadata);
-  
+
           uploadTask.on(
             'state_changed',
             (snapshot) => {
@@ -93,20 +108,43 @@ function UpdateProduct() {
           );
         });
       });
-  
-      const uploadedUrls = await Promise.all(uploadPromises);
-  
+
+      let uploadedUrls;
+      uploadedUrls = await Promise.all(uploadPromises); 
+
+      //get the image links
+      let imageLink1 = uploadedUrls.length !==0 ? uploadedUrls[0] : viewImages[0]; 
+      let imageLink2 = uploadedUrls.length !==0 ? uploadedUrls[1] : viewImages[1];
+      let imageLink3 = uploadedUrls.length !==0 ? uploadedUrls[2] : viewImages[2];
+
       const data = {
-        product,
-        manufacturer,
-        quantity,
-        price,
-        description,
-        imageUrl: uploadedUrls // Use the array of uploaded URLs
+        productName: product,
+        quantity: quantity,
+        productDescription: description,
+        price: price,
+        productManufacturer: manufacturer,
+        imageLinks: "", // Use the array of uploaded URLs - not in use
+        imageLink1: imageLink1,
+        imageLink2: imageLink2,
+        imageLink3: imageLink3,
+        imageLink4: "" //not in use
       };
-  
-      console.log("Submitted Images:", images);
-      console.log(data);
+
+      
+      console.log("file that will be uploaded to the server: ",data);
+
+      //URL for the server - POST request
+      const URL = `http://localhost:8080/api/products/${id}`
+
+      //send data to the server
+      const response = await axios.put(URL, data);
+      if(response.data.id){
+        console.log("Product updated successfully");
+        alert("Product updated successfully");
+      }
+
+
+
     } catch (error) {
       // Handle any errors during the upload process
       console.error('Error uploading images:', error);
@@ -114,12 +152,45 @@ function UpdateProduct() {
       setUploading(false);
     }
   }
-  
-  
-  
+
+
+  //URL for the server - GET request
+  const url = `http://localhost:8080/api/products/product/${id}`;
+  //fetch product details from the server
+  const fetchData = async () => {
+    try {
+      const response = await axios(url);
+      console.log("response got from server : ",response.data)
+      return response.data;
+    } catch (error) {
+      console.log(error.response)
+    }
+  }
+
+  //fetch product details from the server
+  useEffect(() => {
+
+    fetchData().then((data) => {
+      setProduct(data.productName)
+      setManufacturer(data.productManufacturer)
+      setQuantity(data.quantity)
+      setPrice(data.price)
+      setDescription(data.productDescription)
+      setViewImages([data.imageLink1, data.imageLink2, data.imageLink3])
+      
+    });
+
+
+  }, [])
+
+
+
+
 
   return (
     <div className="isolate bg-white px-6 py-24 sm:py-32 lg:px-8">
+      {uploading ? <div className='flex justify-end absolute top-20 right-10' ><h1 className=' font-medium bg-orange-600 rounded-md p-3 text-white ' >Uploading</h1></div> : <></>}
+
       <div
         className="absolute inset-x-0 top-[-10rem] -z-10 transform-gpu overflow-hidden blur-3xl sm:top-[-20rem]"
         aria-hidden="true"
@@ -136,11 +207,11 @@ function UpdateProduct() {
         <h2 className="text-3xl font-bold tracking-tight text-orange-700 sm:text-4xl">Update Product Details</h2>
       </div>
 
-      {uploading ? <h1>Uploadoinf</h1> : <></>}
-
+      {/* form */}
       <form onSubmit={(e) => handleSubmit(e)} className="mx-auto mt-16 max-w-xl sm:mt-20">
         <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2">
 
+          {/* Product Name */}
           <div className="sm:col-span-2">
             <label htmlFor="productName" className="block text-sm font-semibold leading-6 text-gray-900">
               Product Name
@@ -151,10 +222,13 @@ function UpdateProduct() {
                 name="productName"
                 id="productName"
                 onChange={(e) => setProduct(e.target.value)}
+                value={product}
                 className="block w-full rounded-md border-0 px-3.5 py-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
               />
             </div>
           </div>
+
+          {/* Manufacturer */}
           <div className="sm:col-span-2">
             <label htmlFor="manufacturer" className="block text-sm font-semibold leading-6 text-gray-900">
               Manufacturer
@@ -165,10 +239,13 @@ function UpdateProduct() {
                 name="manufacturer"
                 id="manufacturer"
                 onChange={(e) => setManufacturer(e.target.value)}
+                value={manufacturer}
                 className="block w-full rounded-md border-0 px-3.5 py-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
               />
             </div>
           </div>
+
+          {/* Quantity */}
           <div className="sm:col-span-2">
             <label htmlFor="qunatity" className="block text-sm font-semibold leading-6 text-gray-900">
               Quantity
@@ -179,10 +256,13 @@ function UpdateProduct() {
                 name="qunatity"
                 id="quantity"
                 onChange={(e) => setQuantity(e.target.value)}
+                value={quantity}
                 className="block w-full rounded-md border-0 px-3.5 py-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
               />
             </div>
           </div>
+
+          {/* Price */}
           <div className="sm:col-span-2">
             <label htmlFor="phone-number" className="block text-sm font-semibold leading-6 text-gray-900">
               Price
@@ -211,6 +291,7 @@ function UpdateProduct() {
                 name="currency"
                 id="currency"
                 onChange={(e) => setPrice(e.target.value)}
+                value={price}
                 className="block w-full rounded-md border-0 px-3.5 py-2 pl-20 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
               />
             </div>
@@ -226,7 +307,10 @@ function UpdateProduct() {
                 type="file"
                 accept="image/*"
                 multiple
-                onChange={handleImageChange}
+                onChange={(e) => {
+                  uploadImageChange(e)
+                  handleImageChange(e)
+                }}
               />
             </div>
           </div>
@@ -241,6 +325,7 @@ function UpdateProduct() {
                 id="description"
                 rows={4}
                 onChange={(e) => setDescription(e.target.value)}
+                value={description}
                 className="block w-full rounded-md border-0 px-3.5 py-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
                 defaultValue={''}
               />
@@ -264,30 +349,24 @@ function UpdateProduct() {
       <div className="mx-auto mt-6 max-w-2xl sm:px-6 lg:grid lg:max-w-7xl lg:grid-cols-3 lg:gap-x-8 lg:px-8">
         <div className="aspect-h-4 aspect-w-3 hidden overflow-hidden rounded-lg lg:block">
           <img
-            src={images[0]}
-            // alt={product.images[0].alt}
+            src={viewImages[0]}
+            // alt={product.viewImages[0].alt}
             className="h-full w-full object-fit object-center"
           />
         </div>
         <div className="hidden lg:grid lg:grid-cols-1 lg:gap-y-8">
+          
           <div className="aspect-h-2 aspect-w-3 overflow-hidden rounded-lg">
             <img
-              src={images[1]}
-              // alt={product.images[1].alt}
-              className="h-full w-full object-fit object-center"
-            />
-          </div>
-          <div className="aspect-h-2 aspect-w-3 overflow-hidden rounded-lg">
-            <img
-              src={images[2]}
-              // alt={product.images[2].alt}
+              src={viewImages[1]}
+              // alt={product.viewImages[2].alt}
               className="h-full w-full object-fit object-center"
             />
           </div>
         </div>
         <div className="aspect-h-5 aspect-w-4 lg:aspect-h-4 lg:aspect-w-3 sm:overflow-hidden sm:rounded-lg">
           <img
-            src={images[3]}
+            src={viewImages[2]}
             // alt={product.images[3].alt}
             className="h-full w-full object-fit object-center"
           />
